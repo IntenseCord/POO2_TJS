@@ -1,0 +1,49 @@
+from Numero import Numero
+
+class NumeroOctal(Numero):
+    def __init__(self, valor):
+        if isinstance(valor, str):
+            if not all(digito in '01234567' for digito in valor):
+                raise ValueError("El valor debe ser una cadena octal válida (0-7)")
+            self.valor = valor
+        elif isinstance(valor, int):
+            if valor < 0:
+                raise ValueError("No se permiten números negativos en octal")
+            self.valor = oct(valor)[2:]
+        else:
+            raise ValueError("El valor debe ser una cadena octal o un entero")
+    
+    def to_decimal(self):
+        return int(self.valor, 8)
+    
+    def to_binario(self):
+        decimal = self.to_decimal()
+        return bin(decimal)[2:]
+    
+    def to_octal(self):
+        return self.valor
+    
+    def to_hexadecimal(self):
+        decimal = self.to_decimal()
+        return hex(decimal)[2:].upper()
+    
+    def to_romano(self):
+        decimal = self.to_decimal()
+        if decimal <= 0 or decimal > 3999:
+            raise ValueError("Los números romanos solo van del 1 al 3999")
+        
+        valores_romanos = [
+            (1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'),
+            (100, 'C'), (90, 'XC'), (50, 'L'), (40, 'XL'),
+            (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')
+        ]
+        
+        resultado = ""
+        valor_restante = decimal
+        
+        for valor, simbolo in valores_romanos:
+            while valor_restante >= valor:
+                resultado += simbolo
+                valor_restante -= valor
+        
+        return resultado
