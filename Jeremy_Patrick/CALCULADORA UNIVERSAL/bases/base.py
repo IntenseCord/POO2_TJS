@@ -1,4 +1,5 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod #significa que es obligario implementar los metodos  en los hijos
+
 
 class BaseNumerica(ABC):
     def __init__(self, valor):
