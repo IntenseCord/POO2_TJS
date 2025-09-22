@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from core.fetcher import DataFetcher
 from core.sorter import Sorter
+import threading, itertools  # 🔹 necesarios para el spinner
 
 class GUIApp:
     """Interfaz gráfica que maneja la interacción del usuario."""
@@ -12,6 +13,10 @@ class GUIApp:
 
         self.data = []
         self.api_url = tk.StringVar(value="https://api.example.com/data")
+
+        # 🔹 control del spinner
+        self._spinner_running = False
+        self.spinner_label = None
 
         self.algorithms = {
             "Burbuja": Sorter.bubble_sort,
@@ -81,27 +86,60 @@ class GUIApp:
         self.status_label = ttk.Label(bottom, text="Esperando acción...")
         self.status_label.pack(side=tk.LEFT)
 
+    # ===================== SPINNER ======================
+    def _animate_spinner(self):
+        if not hasattr(self, "_spinner_cycle"):
+            self._spinner_cycle = itertools.cycle(["◐", "◓", "◑", "◒"])
+        if self._spinner_running:
+            self.spinner_label.config(text=next(self._spinner_cycle))
+            self.root.after(200, self._animate_spinner)
+
+    def _start_spinner(self):
+        if not self.spinner_label:
+            self.spinner_label = ttk.Label(self.root, text="◐", font=("Arial", 32))
+            self.spinner_label.place(relx=0.5, rely=0.3, anchor="center")
+        self._spinner_running = True
+        self._animate_spinner()
+
+    def _stop_spinner(self):
+        self._spinner_running = False
+        if self.spinner_label:
+            self.spinner_label.destroy()
+            self.spinner_label = None
+    # ====================================================
+
     def load_data(self):
-        fetcher = DataFetcher(self.api_url.get())
-        try:
-            self.data = fetcher.fetch()
-            if not self.data:
-                messagebox.showinfo("Sin datos", "La API devolvió una lista vacía.")
-                return
-            self._populate_tables()
-            # detectar campos numéricos
-            first = self.data[0]
-            numeric_fields = []
-            for k, v in first.items():
-                try:
-                    float(v); numeric_fields.append(k)
-                except: pass
-            self.var_combo['values'] = numeric_fields
-            if numeric_fields:
-                self.var_combo.current(0)
-            self.status_label.config(text=f"Cargados {len(self.data)} registros.")
-        except Exception as e:
-            messagebox.showerror("Error al cargar", str(e))
+        self._start_spinner()
+
+        def task():
+            fetcher = DataFetcher(self.api_url.get())
+            try:
+                data = fetcher.fetch()
+                self.root.after(0, lambda: self._on_data_loaded(data))
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error al cargar", str(e)))
+            finally:
+                self.root.after(0, self._stop_spinner)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _on_data_loaded(self, data):
+        self.data = data
+        if not self.data:
+            messagebox.showinfo("Sin datos", "La API devolvió una lista vacía.")
+            return
+        self._populate_tables()
+        # detectar campos numéricos
+        first = self.data[0]
+        numeric_fields = []
+        for k, v in first.items():
+            try:
+                float(v); numeric_fields.append(k)
+            except: pass
+        self.var_combo['values'] = numeric_fields
+        if numeric_fields:
+            self.var_combo.current(0)
+        self.status_label.config(text=f"Cargados {len(self.data)} registros.")
 
     def _populate_tables(self):
         for tree in (self.left_tree, self.right_tree):
