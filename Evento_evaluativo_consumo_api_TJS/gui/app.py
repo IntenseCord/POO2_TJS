@@ -59,6 +59,23 @@ class GUIApp:
         self.dir_combo.current(0)
         self.dir_combo.grid(row=0, column=5, padx=6)
 
+        # Opciones para decimales (solo visible cuando se selecciona Counting o Radix)
+        ttk.Label(opts, text="Decimales:").grid(row=1, column=0, sticky=tk.W)
+        self.decimal_combo = ttk.Combobox(opts, values=[
+            "Multiplicar (preciso)", 
+            "Redondear (aproximado)", 
+            "Truncar (solo enteros)"
+        ], state="readonly", width=20)
+        self.decimal_combo.current(0)
+        self.decimal_combo.grid(row=1, column=1, padx=6, columnspan=2)
+        
+        # Inicialmente oculto
+        self.decimal_combo.grid_remove()
+        opts.grid_rowconfigure(1, weight=0)
+        
+        # Vincular evento para mostrar/ocultar opciones de decimales
+        self.alg_combo.bind("<<ComboboxSelected>>", self._on_algorithm_change)
+
         ttk.Button(opts, text="Ordenar", command=self.run_sort).grid(row=0, column=6, padx=8)
 
         # Panel tablas
@@ -85,6 +102,26 @@ class GUIApp:
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_label = ttk.Label(bottom, text="Esperando acción...")
         self.status_label.pack(side=tk.LEFT)
+
+    def _on_algorithm_change(self, event=None):
+        """Muestra/oculta opciones de decimales según el algoritmo seleccionado."""
+        alg = self.alg_combo.get()
+        if alg in ["Counting", "Radix"]:
+            # Mostrar opciones de decimales
+            self.decimal_combo.grid()
+            # Agregar etiqueta si no existe
+            for child in self.decimal_combo.master.winfo_children():
+                if isinstance(child, ttk.Label) and child.cget("text") == "Decimales:":
+                    child.grid()
+                    break
+        else:
+            # Ocultar opciones de decimales
+            self.decimal_combo.grid_remove()
+            # Ocultar etiqueta
+            for child in self.decimal_combo.master.winfo_children():
+                if isinstance(child, ttk.Label) and child.cget("text") == "Decimales:":
+                    child.grid_remove()
+                    break
 
     # ===================== SPINNER ======================
     def _animate_spinner(self):
@@ -164,7 +201,23 @@ class GUIApp:
         rev = (self.dir_combo.get() == "Descendente")
         try:
             sorter_func = self.algorithms[alg]
-            sorted_data = sorter_func(self.data, var, rev)
+            
+            # Para counting sort y radix sort, usar el modo seleccionado por el usuario
+            if alg in ["Counting", "Radix"]:
+                # Convertir la selección del usuario al parámetro del algoritmo
+                decimal_selection = self.decimal_combo.get()
+                if "Multiplicar" in decimal_selection:
+                    decimal_mode = "multiply"
+                elif "Redondear" in decimal_selection:
+                    decimal_mode = "round"
+                elif "Truncar" in decimal_selection:
+                    decimal_mode = "truncate"
+                else:
+                    decimal_mode = "multiply"  # Por defecto
+                
+                sorted_data = sorter_func(self.data, var, rev, decimal_mode=decimal_mode)
+            else:
+                sorted_data = sorter_func(self.data, var, rev)
             self._show_sorted(sorted_data)
         except Exception as e:
             messagebox.showerror("Error", str(e))

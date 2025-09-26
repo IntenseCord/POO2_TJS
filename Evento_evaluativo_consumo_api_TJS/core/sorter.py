@@ -14,6 +14,41 @@ class Sorter:
             return float(val)
         except Exception:
             raise ValueError(f"Valor no numérico en '{key}': {val}")
+    
+    @staticmethod
+    def _clean_numeric_value(val):
+        """Limpia y convierte un valor a float, manejando casos especiales."""
+        if val is None:
+            raise ValueError("Valor nulo")
+        
+        # Si ya es un número, devolverlo
+        if isinstance(val, (int, float)):
+            return float(val)
+        
+        # Si es string, limpiar espacios y caracteres especiales
+        if isinstance(val, str):
+            # Remover espacios en blanco
+            cleaned = val.strip()
+            
+            # Manejar strings vacíos
+            if not cleaned:
+                raise ValueError("String vacío")
+            
+            # Remover caracteres no numéricos comunes (excepto punto y signo negativo)
+            import re
+            cleaned = re.sub(r'[^\d\.\-\+eE]', '', cleaned)
+            
+            # Intentar conversión
+            try:
+                return float(cleaned)
+            except ValueError:
+                raise ValueError(f"No se puede convertir '{val}' a número")
+        
+        # Para otros tipos, intentar conversión directa
+        try:
+            return float(val)
+        except ValueError:
+            raise ValueError(f"Tipo no soportado: {type(val)}")
 
     @staticmethod
     def _swap(lst, i, j):
@@ -99,46 +134,166 @@ class Sorter:
         return arr
 
     @staticmethod
-    def counting_sort(data: List[Dict[str, Any]], key: str, reverse: bool = False) -> List[Dict[str, Any]]:
-        """Counting sort: requiere enteros no negativos. Ordena por clave entera."""
-        # Convertir a enteros
+    def counting_sort(data: List[Dict[str, Any]], key: str, reverse: bool = False, decimal_mode: str = "multiply") -> List[Dict[str, Any]]:
+        """
+        Counting sort adaptado para manejar números decimales.
+        
+        Args:
+            decimal_mode: 
+                - "multiply": Multiplica por 100 (5.66 -> 566)
+                - "round": Redondea al entero más cercano (5.66 -> 6)  
+                - "truncate": Trunca decimales (5.66 -> 5)
+        """
         arr = copy.deepcopy(data)
         values = []
-        for item in arr:
-            v = Sorter._get_key_value(item, key)
-            if not float(v).is_integer() or v < 0:
-                raise ValueError("Counting sort requiere enteros no negativos.")
-            values.append(int(v))
+        conversion_factor = 1
+        
+        # Determinar si hay decimales y calcular factor de conversión
+        if decimal_mode == "multiply":
+            max_decimals = 0
+            for item in arr:
+                raw_val = item.get(key, None)
+                if raw_val is None:
+                    continue
+                try:
+                    if isinstance(raw_val, str):
+                        cleaned_val = raw_val.strip()
+                        import re
+                        cleaned_val = re.sub(r'[^\d\.\-\+]', '', cleaned_val)
+                        float_val = float(cleaned_val) if cleaned_val else 0.0
+                    else:
+                        float_val = float(raw_val)
+                    
+                    # Contar decimales
+                    decimal_str = str(float_val).split('.')
+                    if len(decimal_str) > 1:
+                        max_decimals = max(max_decimals, len(decimal_str[1]))
+                except:
+                    pass
+            
+            conversion_factor = 10 ** max_decimals
+        
+        for i, item in enumerate(arr):
+            raw_val = item.get(key, None)
+            if raw_val is None:
+                raise ValueError(f"Registro no contiene la clave {key}")
+            
+            try:
+                # Limpiar el valor si es string
+                if isinstance(raw_val, str):
+                    cleaned_val = raw_val.strip()
+                    import re
+                    cleaned_val = re.sub(r'[^\d\.\-\+]', '', cleaned_val)
+                    float_val = float(cleaned_val) if cleaned_val else 0.0
+                else:
+                    float_val = float(raw_val)
+                
+                # Convertir según el modo seleccionado
+                if decimal_mode == "multiply":
+                    int_val = int(round(float_val * conversion_factor))
+                elif decimal_mode == "round":
+                    int_val = round(float_val)
+                elif decimal_mode == "truncate":
+                    int_val = int(float_val)
+                else:
+                    raise ValueError(f"Modo decimal no válido: {decimal_mode}")
+                
+                # Verificar que no sea negativo
+                if int_val < 0:
+                    raise ValueError(f"Counting sort no puede manejar valores negativos. Valor: '{raw_val}' -> {int_val} en posición {i}")
+                
+                values.append(int_val)
+                
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Error procesando valor en posición {i}: '{raw_val}' (tipo: {type(raw_val).__name__}) - {str(e)}")
+        
         if len(values) == 0:
             return arr
+        
         mx = max(values)
         count = [0] * (mx + 1)
         for v in values:
             count[v] += 1
+        
         # Prefijo
         for i in range(1, len(count)):
             count[i] += count[i - 1]
+        
         out = [None] * len(arr)
         
         for i in range(len(arr) - 1, -1, -1):
-            v = int(Sorter._get_key_value(arr[i], key))
+            raw_val = arr[i].get(key, None)
+            # Aplicar la misma lógica de conversión
+            if isinstance(raw_val, str):
+                cleaned_val = raw_val.strip()
+                import re
+                cleaned_val = re.sub(r'[^\d\.\-\+]', '', cleaned_val)
+                v_float = float(cleaned_val) if cleaned_val else 0.0
+            else:
+                v_float = float(raw_val)
+            
+            # Convertir según el modo
+            if decimal_mode == "multiply":
+                v = int(round(v_float * conversion_factor))
+            elif decimal_mode == "round":
+                v = round(v_float)
+            elif decimal_mode == "truncate":
+                v = int(v_float)
+            
             pos = count[v] - 1
             out[pos] = arr[i]
             count[v] -= 1
+            
         if reverse:
             out.reverse()
         return out
 
     @staticmethod
-    def radix_sort(data: List[Dict[str, Any]], key: str, reverse: bool = False) -> List[Dict[str, Any]]:
+    def radix_sort(data: List[Dict[str, Any]], key: str, reverse: bool = False, decimal_mode: str = "multiply") -> List[Dict[str, Any]]:
         """Radix sort para enteros no negativos."""
         arr = copy.deepcopy(data)
         values = []
+        conversion_factor = 1
+        
+        if decimal_mode == "multiply":
+            max_decimals = 0
+            for item in arr:
+                raw_val = item.get(key, None)
+                if raw_val is None:
+                    continue
+                try:
+                    if isinstance(raw_val, str):
+                        cleaned_val = raw_val.strip()
+                        import re
+                        cleaned_val = re.sub(r'[^\d\.\-\+]', '', cleaned_val)
+                        float_val = float(cleaned_val) if cleaned_val else 0.0
+                    else:
+                        float_val = float(raw_val)
+                    
+                    # Contar decimales
+                    decimal_str = str(float_val).split('.')
+                    if len(decimal_str) > 1:
+                        max_decimals = max(max_decimals, len(decimal_str[1]))
+                except:
+                    pass
+            
+            conversion_factor = 10 ** max_decimals
+        
         for item in arr:
             v = Sorter._get_key_value(item, key)
-            if not float(v).is_integer() or v < 0:
+            if decimal_mode == "multiply":
+                v = int(round(v * conversion_factor))
+            elif decimal_mode == "round":
+                v = round(v)
+            elif decimal_mode == "truncate":
+                v = int(v)
+            else:
+                raise ValueError(f"Modo decimal no válido: {decimal_mode}")
+            float_val = float(v)
+            if float_val < 0:
                 raise ValueError("Radix sort requiere enteros no negativos.")
-            values.append(int(v))
+            int_val = int(float_val)
+            values.append(int_val)
         if len(values) == 0:
             return arr
         maxv = max(values)
@@ -147,7 +302,15 @@ class Sorter:
         while maxv // exp > 0:
             buckets = [[] for _ in range(10)]
             for item in out:
-                v = int(Sorter._get_key_value(item, key))
+                v_float = float(Sorter._get_key_value(item, key))
+                if decimal_mode == "multiply":
+                    v = int(round(v_float * conversion_factor))
+                elif decimal_mode == "round":
+                    v = round(v_float)
+                elif decimal_mode == "truncate":
+                    v = int(v_float)
+                else:
+                    raise ValueError(f"Modo decimal no válido: {decimal_mode}")
                 digit = (v // exp) % 10
                 buckets[digit].append(item)
             out = [x for bucket in buckets for x in bucket]
